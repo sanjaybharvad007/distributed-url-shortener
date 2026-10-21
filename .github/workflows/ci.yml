@@ -164,8 +164,8 @@ jobs:
     env:
       # AWS-hosted mirrors of the Trivy databases: ghcr.io throttles anonymous pulls from
       # GitHub runners, which makes the scan exit 1 with no findings at all.
-      TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
-      TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
+      TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2
+      TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1,ghcr.io/aquasecurity/trivy-java-db:1
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -182,6 +182,7 @@ jobs:
       # 1. Human-readable report: always succeeds, so the findings are visible even when the gate fails.
       - name: Trivy report (table)
         uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true # a DB-download hiccup here must not decide the job; the gate below does
         with:
           image-ref: ${{ matrix.service }}:ci
           format: table
@@ -192,6 +193,7 @@ jobs:
       - name: Publish findings (job summary + annotations)
         if: always()
         run: |
+          touch trivy-${{ matrix.service }}.txt
           {
             echo "## Trivy · ${{ matrix.service }}"
             echo '```'
@@ -212,11 +214,9 @@ jobs:
           ignore-unfixed: true
           exit-code: "0"
           skip-setup-trivy: true
-        env:
-          TRIVY_SKIP_DB_UPDATE: "true"
-          TRIVY_SKIP_JAVA_DB_UPDATE: "true"
+        continue-on-error: true
       - name: Upload scan results
-        if: always()
+        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.service)) != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-${{ matrix.service }}.sarif
@@ -232,9 +232,6 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           skip-setup-trivy: true
-        env:
-          TRIVY_SKIP_DB_UPDATE: "true"
-          TRIVY_SKIP_JAVA_DB_UPDATE: "true"
 
   # ------------------------------------------------------------------ end-to-end
   e2e:
