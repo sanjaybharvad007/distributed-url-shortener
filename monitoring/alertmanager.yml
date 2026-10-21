@@ -1,0 +1,38 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: [alertname, service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="page"]
+      receiver: pager
+      repeat_interval: 1h
+    - matchers: [severity="ticket"]
+      receiver: tickets
+
+receivers:
+  # Local stack: alerts are visible in the Alertmanager UI (http://localhost:9093).
+  # In AWS the same rules route to SNS / PagerDuty / Slack via the integrations below.
+  - name: default
+  - name: pager
+    # pagerduty_configs:
+    #   - routing_key: ${PAGERDUTY_ROUTING_KEY}
+    # sns_configs:
+    #   - topic_arn: arn:aws:sns:us-west-2:123456789012:url-shortener-oncall
+  - name: tickets
+    # slack_configs:
+    #   - api_url: ${SLACK_WEBHOOK_URL}
+    #     channel: "#url-shortener-alerts"
+
+inhibit_rules:
+  # A down shard explains cache-ratio and fail-open alerts; don't page twice.
+  - source_matchers: [alertname="RedisShardDown"]
+    target_matchers: [alertname=~"CacheHitRatioLow|RateLimitFailOpen"]
+    equal: [service]
+  - source_matchers: [alertname="ServiceDown"]
+    target_matchers: [alertname=~"HighErrorRateBurn.*|HighLatencyP99.*"]
+    equal: [service]

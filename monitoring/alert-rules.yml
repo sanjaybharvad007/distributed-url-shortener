@@ -1,0 +1,151 @@
+# Alert rules for the URL shortener. Each alert maps to a section in docs/RUNBOOK.md.
+groups:
+  - name: slo
+    rules:
+      # Availability SLO: 99.9% of redirects succeed (non-5xx). Multi-window burn-rate alerts
+      # per the Google SRE workbook: fast burn (1h/5m at 14.4x) pages, slow burn (6h/30m at 6x) tickets.
+      - record: job:redirect_errors:ratio_rate5m
+        expr: |
+          sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}",status=~"5.."}[5m]))
+          / clamp_min(sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}"}[5m])), 1e-9)
+      - record: job:redirect_errors:ratio_rate30m
+        expr: |
+          sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}",status=~"5.."}[30m]))
+          / clamp_min(sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}"}[30m])), 1e-9)
+      - record: job:redirect_errors:ratio_rate1h
+        expr: |
+          sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}",status=~"5.."}[1h]))
+          / clamp_min(sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}"}[1h])), 1e-9)
+      - record: job:redirect_errors:ratio_rate6h
+        expr: |
+          sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}",status=~"5.."}[6h]))
+          / clamp_min(sum(rate(redirector_http_request_duration_seconds_count{route="GET /{code}"}[6h])), 1e-9)
+
+      - alert: HighErrorRateBurn
+        expr: |
+          (job:redirect_errors:ratio_rate1h > (14.4 * 0.001) and job:redirect_errors:ratio_rate5m > (14.4 * 0.001))
+        for: 2m
+        labels: { severity: page, service: redirector }
+        annotations:
+          summary: "Redirect availability SLO burning fast (1h window)"
+          description: "5xx ratio {{ $value | humanizePercentage }} over the last hour; error budget exhausted in < 2 days at this rate."
+          runbook: "docs/RUNBOOK.md#higherrorrateburn-slo-burn-rate"
+
+      - alert: HighErrorRateBurnSlow
+        expr: |
+          (job:redirect_errors:ratio_rate6h > (6 * 0.001) and job:redirect_errors:ratio_rate30m > (6 * 0.001))
+        for: 15m
+        labels: { severity: ticket, service: redirector }
+        annotations:
+          summary: "Redirect availability SLO burning slowly (6h window)"
+          runbook: "docs/RUNBOOK.md#higherrorrateburn-slo-burn-rate"
+
+  - name: latency
+    rules:
+      - alert: HighLatencyP99Redirect
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(redirector_http_request_duration_seconds_bucket{route="GET /{code}"}[5m]))) > 0.05
+        for: 5m
+        labels: { severity: page, service: redirector }
+        annotations:
+          summary: "Redirect p99 latency above 50 ms"
+          description: "p99 = {{ $value | humanizeDuration }}. Usually a cache-miss storm or a slow shard."
+          runbook: "docs/RUNBOOK.md#highlatencyp99"
+
+      - alert: HighLatencyP99Api
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri=~"/api/.*"}[5m]))) > 0.3
+        for: 5m
+        labels: { severity: ticket, service: shortener-api }
+        annotations:
+          summary: "API p99 latency above 300 ms"
+          runbook: "docs/RUNBOOK.md#highlatencyp99"
+
+  - name: dependencies
+    rules:
+      - alert: RedisShardDown
+        expr: |
+          sum by (service, shard) (rate(hashring_shard_errors_total[2m]))
+          / clamp_min(sum by (service, shard) (rate(hashring_shard_requests_total[2m])), 1e-9) > 0.5
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "Redis shard {{ $labels.shard }} failing for {{ $labels.service }}"
+          description: "More than half of commands to shard {{ $labels.shard }} are failing. Keys on this shard miss the cache; rate limiting fails open."
+          runbook: "docs/RUNBOOK.md#redisshardown"
+
+      - alert: CacheHitRatioLow
+        expr: |
+          sum(rate(cache_lookups_total{result="hit"}[10m]))
+          / clamp_min(sum(rate(cache_lookups_total{result=~"hit|miss"}[10m])), 1e-9) < 0.8
+          and sum(rate(cache_lookups_total[10m])) > 1
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Cache hit ratio below 80% for 10 minutes"
+          runbook: "docs/RUNBOOK.md#cachehitratiolow"
+
+      - alert: DynamoDBErrors
+        expr: |
+          sum(rate(dynamodb_calls_total{result="error"}[5m])) > 1
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "DynamoDB calls failing"
+          description: "{{ $value | humanize }} errors/s across services. Check throttling and the API circuit breaker."
+          runbook: "docs/RUNBOOK.md#higherrorrateburn-slo-burn-rate"
+
+      - alert: CircuitBreakerOpen
+        expr: |
+          max(resilience4j_circuitbreaker_state{state="open"}) == 1
+        for: 1m
+        labels: { severity: page, service: shortener-api }
+        annotations:
+          summary: "DynamoDB circuit breaker is open in shortener-api"
+          description: "Link creation is returning 503 until the breaker closes."
+          runbook: "docs/RUNBOOK.md#higherrorrateburn-slo-burn-rate"
+
+  - name: pipeline
+    rules:
+      - alert: ClickStreamLagHigh
+        expr: max(click_consumer_lag_events) > 10000
+        for: 5m
+        labels: { severity: ticket, service: shortener-api }
+        annotations:
+          summary: "Click consumer is more than 10k events behind"
+          runbook: "docs/RUNBOOK.md#clickstreamlaghigh"
+
+      - alert: ClickEventsDropped
+        expr: sum(rate(click_events_dropped_total[5m])) > 0
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Click events are being dropped"
+          description: "Buffer full or stream shard unreachable; click counts will under-report."
+          runbook: "docs/RUNBOOK.md#clickstreamlaghigh"
+
+      - alert: RateLimitFailOpen
+        expr: sum(rate(ratelimit_decisions_total{result="failopen"}[5m])) > 0
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Rate limiter failing open"
+          description: "Rate-limit decisions cannot reach Redis; abusive clients are unthrottled."
+          runbook: "docs/RUNBOOK.md#ratelimitfailopen"
+
+  - name: capacity
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"shortener-api|redirector"} == 0
+        for: 1m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.job }} is not being scraped"
+
+      - alert: JvmHeapPressure
+        expr: |
+          sum by (instance) (jvm_memory_used_bytes{area="heap"}) / sum by (instance) (jvm_memory_max_bytes{area="heap"}) > 0.9
+        for: 10m
+        labels: { severity: ticket, service: shortener-api }
+        annotations:
+          summary: "JVM heap above 90% on {{ $labels.instance }}"
