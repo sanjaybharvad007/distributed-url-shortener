@@ -13,11 +13,11 @@ step() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 fail() { printf '\033[1;31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 
 step "waiting for services"
-for i in $(seq 1 30); do
-  if curl -sf "$API_URL/actuator/health/readiness" >/dev/null && curl -sf "$REDIRECT_URL/healthz" >/dev/null; then
+for i in $(seq 1 90); do
+  if curl -sf "$API_URL/actuator/health/readiness" >/dev/null && curl -sf "$REDIRECT_URL/readyz" >/dev/null; then
     break
   fi
-  [ "$i" -eq 30 ] && fail "services did not become healthy"
+  [ "$i" -eq 90 ] && fail "services did not become ready within 180s"
   sleep 2
 done
 

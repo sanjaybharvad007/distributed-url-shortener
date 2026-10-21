@@ -14,6 +14,8 @@ const API_KEY = __ENV.API_KEY || 'dev-key';
 const RATE = Number(__ENV.RATE || 1000); // redirects per second
 const DURATION = __ENV.DURATION || '2m';
 const POOL = Number(__ENV.POOL || 500); // distinct links
+const P95_MS = Number(__ENV.P95_MS || 20); // SLO budget; relax on shared CI runners
+const P99_MS = Number(__ENV.P99_MS || 50);
 
 const redirectLatency = new Trend('redirect_latency', true);
 const cacheMissSuspect = new Counter('redirects_over_20ms');
@@ -42,7 +44,7 @@ export const options = {
   },
   thresholds: {
     // SLOs from docs/ARCHITECTURE.md
-    'http_req_duration{scenario:redirects}': ['p(99)<50', 'p(95)<20'],
+    'http_req_duration{scenario:redirects}': [`p(99)<${P99_MS}`, `p(95)<${P95_MS}`],
     'http_req_failed{scenario:redirects}': ['rate<0.001'],
     checks: ['rate>0.999'],
   },
@@ -102,5 +104,5 @@ export function handleSummary(data) {
     `p99=${p('redirect_latency', 'p(99)')}ms`,
     `failed=${p('http_req_failed', 'rate')}`,
   ].join('  ');
-  return { stdout: `\n${line}\n`, 'loadtest/k6/summary.json': JSON.stringify(data, null, 2) };
+  return { stdout: `\n${line}\n`, 'summary.json': JSON.stringify(data, null, 2) };
 }

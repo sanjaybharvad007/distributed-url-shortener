@@ -50,7 +50,7 @@ smoke: ## End-to-end smoke test against the local stack
 	./scripts/smoke.sh
 
 load-test: ## Run the k6 redirect load test against the local stack
-	docker run --rm -i --network host -e BASE_URL=http://localhost:8081 -e API_URL=http://localhost:8080 grafana/k6 run - < loadtest/k6/redirect.js
+	docker run --rm --network host -e BASE_URL=http://localhost:8081 -e API_URL=http://localhost:8080 -v "$$PWD/loadtest/k6:/lt" -w /lt grafana/k6:0.54.0 run /lt/redirect.js
 
 clean: ## Remove build artifacts
 	cd $(API_DIR) && mvn -q clean || true

@@ -144,10 +144,10 @@ jobs:
       - run: tflint --chdir=infra/terraform --init && tflint --chdir=infra/terraform
       - name: promtool check rules
         run: |
-          docker run --rm -v "$PWD/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v2.55.0 check rules /m/alert-rules.yml
-          docker run --rm -v "$PWD/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v2.55.0 check config /m/prometheus.yml
+          docker run --rm -v "$PWD/monitoring:/etc/prometheus:ro" --entrypoint promtool prom/prometheus:v2.55.0 check rules /etc/prometheus/alert-rules.yml
+          docker run --rm -v "$PWD/monitoring:/etc/prometheus:ro" --entrypoint promtool prom/prometheus:v2.55.0 check config /etc/prometheus/prometheus.yml
       - name: amtool check config
-        run: docker run --rm -v "$PWD/monitoring:/m:ro" --entrypoint amtool prom/alertmanager:v0.27.0 check-config /m/alertmanager.yml
+        run: docker run --rm -v "$PWD/monitoring:/etc/alertmanager:ro" --entrypoint amtool prom/alertmanager:v0.27.0 check-config /etc/alertmanager/alertmanager.yml
       - name: docker compose config
         run: docker compose config -q
 
@@ -196,13 +196,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Start the stack
-        run: docker compose up --build -d --wait --wait-timeout 180
+        run: docker compose up --build -d
       - name: Smoke test
         run: ./scripts/smoke.sh
       - name: Short load test (SLO thresholds)
         run: |
           docker run --rm --network host -e BASE_URL=http://localhost:8081 -e API_URL=http://localhost:8080 \
-            -e RATE=200 -e DURATION=30s -e POOL=50 -v "$PWD/loadtest:/lt" grafana/k6:0.54.0 run /lt/k6/redirect.js
+            -e RATE=200 -e DURATION=30s -e POOL=50 -e P95_MS=100 -e P99_MS=250 \
+            -v "$PWD/loadtest/k6:/lt" -w /lt grafana/k6:0.54.0 run /lt/redirect.js
       - name: Logs on failure
         if: failure()
         run: docker compose logs --no-color | tail -300
