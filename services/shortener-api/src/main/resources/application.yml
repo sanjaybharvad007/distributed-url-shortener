@@ -1,0 +1,118 @@
+spring:
+  application:
+    name: shortener-api
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+server:
+  port: 8080
+  shutdown: graceful
+  forward-headers-strategy: native
+  tomcat:
+    max-connections: 10000
+    threads:
+      max: 200
+
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8081}
+  api-keys: ${APP_API_KEYS:dev-key}
+  redis:
+    nodes: ${APP_REDIS_NODES:localhost:6379,localhost:6380,localhost:6381}
+    virtual-nodes: 150
+    command-timeout: 200ms
+    positive-ttl: 24h
+    negative-ttl: 60s
+  dynamodb:
+    endpoint: ${APP_DYNAMODB_ENDPOINT:}
+    region: ${AWS_REGION:us-west-2}
+    table: short_urls
+    call-timeout: 2s
+    attempt-timeout: 800ms
+  id:
+    worker-id: ${APP_ID_WORKER_ID:-1}   # -1 => derive from hostname
+    epoch-millis: 1704067200000          # 2024-01-01T00:00:00Z
+  rate-limit:
+    enabled: true
+    requests-per-second: 20
+    burst: 40
+  click-consumer:
+    enabled: true
+    group: api-consumers
+    batch-size: 500
+    max-stream-length: 1000000
+  url:
+    max-length: 2048
+    blocked-hosts: localhost,127.0.0.1,0.0.0.0,169.254.169.254,metadata.google.internal
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,hashring
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+      group:
+        readiness:
+          include: readinessState,redisRing,dynamoDb
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 10ms,25ms,50ms,100ms,250ms,500ms,1s
+    tags:
+      service: shortener-api
+  tracing:
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:0.1}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      dynamodb:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 50
+        minimum-number-of-calls: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 5
+        record-exceptions:
+          - software.amazon.awssdk.core.exception.SdkException
+        ignore-exceptions:
+          - software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException
+  retry:
+    instances:
+      dynamodb:
+        max-attempts: 3
+        wait-duration: 50ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        enable-randomized-wait: true
+        randomized-wait-factor: 0.5
+        retry-exceptions:
+          - software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughputExceededException
+          - software.amazon.awssdk.services.dynamodb.model.InternalServerErrorException
+          - software.amazon.awssdk.core.exception.SdkClientException
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+logging:
+  level:
+    root: INFO
+    com.urlshortener: INFO
+    software.amazon.awssdk: WARN
