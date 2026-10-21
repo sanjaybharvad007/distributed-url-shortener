@@ -1,0 +1,26 @@
+{
+  "description": "Shared conformance vectors for MurmurHash3 x86_32 (seed 0) and the consistent-hash ring. Generated once; both the Java and Go implementations must reproduce these exactly.",
+  "nodes": ["redis-1:6379", "redis-2:6379", "redis-3:6379"],
+  "virtualNodes": 150,
+  "vectors": [
+    {"key": "", "hash32": 0, "shard": 0},
+    {"key": "hello", "hash32": 613153351, "shard": 2},
+    {"key": "The quick brown fox jumps over the lazy dog", "hash32": 776992547, "shard": 2},
+    {"key": "url:abc1234", "hash32": 1672508352, "shard": 1},
+    {"key": "url:5kH2mQ8", "hash32": 3142179156, "shard": 1},
+    {"key": "url:RPZgLXaGtU", "hash32": 1907604895, "shard": 1},
+    {"key": "rl:k_0123456789abcdef", "hash32": 1587926118, "shard": 0},
+    {"key": "rl:ip:203.0.113.7", "hash32": 3625162600, "shard": 2},
+    {"key": "clicks", "hash32": 1135039025, "shard": 1},
+    {"key": "url:ZZZZ", "hash32": 2916455260, "shard": 1},
+    {"key": "url:0000", "hash32": 827589573, "shard": 0},
+    {"key": "url:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "hash32": 3892859720, "shard": 2},
+    {"key": "url:üñíçødé", "hash32": 1812857883, "shard": 1},
+    {"key": "url:日本語", "hash32": 2129564428, "shard": 2},
+    {"key": "a", "hash32": 1009084850, "shard": 0},
+    {"key": "ab", "hash32": 2613040991, "shard": 0},
+    {"key": "abc", "hash32": 3017643002, "shard": 1},
+    {"key": "abcd", "hash32": 1139631978, "shard": 1},
+    {"key": "abcde", "hash32": 3902511862, "shard": 2}
+  ]
+}
