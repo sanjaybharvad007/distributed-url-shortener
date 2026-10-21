@@ -1,0 +1,147 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, prod]
+        default: staging
+      ref:
+        description: Git ref to deploy (defaults to the branch/tag the workflow runs on)
+        required: false
+
+permissions:
+  id-token: write # OIDC → AWS, no stored access keys
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-west-2
+  ECR_API: url-shortener/shortener-api
+  ECR_REDIRECTOR: url-shortener/redirector
+
+jobs:
+  build-push:
+    name: Build and push images
+    # Only deploy from a green CI run on main, or an explicit dispatch.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      api_image: ${{ steps.meta.outputs.api_image }}
+      redirector_image: ${{ steps.meta.outputs.redirector_image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Image metadata
+        id: meta
+        run: |
+          TAG="$(git rev-parse --short=12 HEAD)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "api_image=${{ steps.ecr.outputs.registry }}/${ECR_API}:$TAG" >> "$GITHUB_OUTPUT"
+          echo "redirector_image=${{ steps.ecr.outputs.registry }}/${ECR_REDIRECTOR}:$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push shortener-api
+        uses: docker/build-push-action@v6
+        with:
+          context: services/shortener-api
+          push: true
+          tags: ${{ steps.meta.outputs.api_image }}
+          cache-from: type=gha,scope=shortener-api
+          cache-to: type=gha,scope=shortener-api,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Build and push redirector
+        uses: docker/build-push-action@v6
+        with:
+          context: services/redirector
+          push: true
+          tags: ${{ steps.meta.outputs.redirector_image }}
+          build-args: VERSION=${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=redirector
+          cache-to: type=gha,scope=redirector,mode=max
+          provenance: true
+          sbom: true
+
+  deploy:
+    name: Rolling deploy to ECS
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    strategy:
+      matrix:
+        include:
+          - service: shortener-api
+            image_output: api_image
+          - service: redirector
+            image_output: redirector_image
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch current task definition
+        run: |
+          CLUSTER="url-shortener-${{ github.event.inputs.environment || 'staging' }}"
+          echo "CLUSTER=$CLUSTER" >> "$GITHUB_ENV"
+          aws ecs describe-task-definition \
+            --task-definition "$CLUSTER-${{ matrix.service }}" \
+            --query taskDefinition > task-def.json
+
+      - name: Point task definition at the new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: ${{ matrix.service }}
+          image: ${{ needs.build-push.outputs[matrix.image_output] }}
+
+      - name: Deploy and wait for stability
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ matrix.service }}
+          cluster: ${{ env.CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
+
+  verify:
+    name: Post-deploy smoke test
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke test against the live environment
+        env:
+          API_URL: ${{ vars.API_URL }}
+          REDIRECT_URL: ${{ vars.REDIRECT_URL }}
+          API_KEY: ${{ secrets.SMOKE_API_KEY }}
+        run: ./scripts/smoke.sh

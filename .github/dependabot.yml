@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /services/shortener-api
+    schedule: { interval: weekly }
+    groups:
+      spring: { patterns: ["org.springframework*"] }
+      aws: { patterns: ["software.amazon.awssdk*"] }
+  - package-ecosystem: gomod
+    directory: /services/redirector
+    schedule: { interval: weekly }
+    groups:
+      aws: { patterns: ["github.com/aws/*"] }
+      otel: { patterns: ["go.opentelemetry.io/*"] }
+  - package-ecosystem: terraform
+    directory: /infra/terraform
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /services/shortener-api
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /services/redirector
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
