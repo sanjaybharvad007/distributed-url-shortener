@@ -1,0 +1,40 @@
+# Java / Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+*.log
+.mvn/timing.properties
+
+# Go
+bin/
+dist/
+*.test
+*.out
+coverage.*
+vendor/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+.terraform.lock.hcl
+crash.log
+
+# OS / misc
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+node_modules/
