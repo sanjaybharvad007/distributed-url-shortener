@@ -1,0 +1,136 @@
+name: url-shortener
+
+x-redis-common: &redis-common
+  image: redis:7.4-alpine
+  command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+  healthcheck:
+    test: ["CMD", "redis-cli", "ping"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+
+services:
+  # ---------------------------------------------------------------- cache ring (3 shards)
+  redis-1:
+    <<: *redis-common
+    ports: ["6379:6379"]
+  redis-2:
+    <<: *redis-common
+    ports: ["6380:6379"]
+  redis-3:
+    <<: *redis-common
+    ports: ["6381:6379"]
+
+  # ---------------------------------------------------------------- persistence
+  dynamodb:
+    image: amazon/dynamodb-local:2.5.2
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ -o /dev/null || [ $? -eq 22 ]"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  dynamodb-init:
+    image: amazon/aws-cli:2.17.56
+    depends_on:
+      dynamodb:
+        condition: service_started
+    environment:
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_DEFAULT_REGION: us-west-2
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+    volumes:
+      - ./scripts/create-tables.sh:/create-tables.sh:ro
+    entrypoint: ["/bin/sh", "/create-tables.sh"]
+
+  # ---------------------------------------------------------------- services
+  shortener-api:
+    build:
+      context: ./services/shortener-api
+    ports: ["8080:8080"]
+    depends_on:
+      redis-1: { condition: service_healthy }
+      redis-2: { condition: service_healthy }
+      redis-3: { condition: service_healthy }
+      dynamodb-init: { condition: service_completed_successfully }
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      APP_REDIS_NODES: redis-1:6379,redis-2:6379,redis-3:6379
+      APP_DYNAMODB_ENDPOINT: http://dynamodb:8000
+      APP_BASE_URL: http://localhost:8081
+      APP_ID_WORKER_ID: "1"
+      APP_API_KEYS: dev-key,smoke-key
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: us-west-2
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+UseZGC
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  redirector:
+    build:
+      context: ./services/redirector
+    ports: ["8081:8081"]
+    depends_on:
+      redis-1: { condition: service_healthy }
+      redis-2: { condition: service_healthy }
+      redis-3: { condition: service_healthy }
+      dynamodb-init: { condition: service_completed_successfully }
+    environment:
+      REDIRECTOR_ADDR: ":8081"
+      REDIRECTOR_REDIS_NODES: redis-1:6379,redis-2:6379,redis-3:6379
+      REDIRECTOR_DYNAMODB_ENDPOINT: http://dynamodb:8000
+      REDIRECTOR_DYNAMODB_TABLE: short_urls
+      REDIRECTOR_RATE_LIMIT_RPS: "200"
+      REDIRECTOR_RATE_LIMIT_BURST: "400"
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: us-west-2
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    healthcheck:
+      test: ["CMD", "/redirector", "-healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  # ---------------------------------------------------------------- observability
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports: ["4318:4318", "4317:4317"]
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+    ports: ["9090:9090"]
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports: ["9093:9093"]
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
