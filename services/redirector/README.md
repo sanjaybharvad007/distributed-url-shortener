@@ -1,4 +1,4 @@
-# redirector (Go 1.23)
+# redirector (Go 1.26)
 
 Data-plane service: `GET /{code}` → `302`. Static binary, distroless image, no warm-up.
 

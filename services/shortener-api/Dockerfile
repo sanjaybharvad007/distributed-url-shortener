@@ -5,7 +5,7 @@ COPY pom.xml .
 RUN mvn -B -q dependency:go-offline
 COPY src ./src
 RUN mvn -B -q -DskipTests package && \
-    java -Djarmode=layertools -jar target/shortener-api-*.jar extract --destination /layers
+    java -Djarmode=tools -jar target/shortener-api-*.jar extract --layers --launcher --destination /layers
 
 # ---- runtime -----------------------------------------------------------------
 FROM eclipse-temurin:21-jre-alpine

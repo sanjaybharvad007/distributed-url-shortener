@@ -15,7 +15,7 @@ concurrency:
 
 env:
   JAVA_VERSION: "21"
-  GO_VERSION: "1.23"
+  GO_VERSION: "1.26"
 
 jobs:
   changes:
@@ -96,9 +96,9 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.61
+          version: v2.15.0
           working-directory: services/redirector
       - name: Tests with race detector
         run: go test -race -count=1 -coverprofile=coverage.out ./...

@@ -24,7 +24,7 @@
 flowchart LR
     C[Clients] --> ALB
     ALB -->|/api/v1/*| API[shortener-api<br/>Java 21 · Spring Boot 3]
-    ALB -->|/{code}| R[redirector<br/>Go 1.23]
+    ALB -->|/{code}| R[redirector<br/>Go 1.26]
     API --> RING[(Redis ring<br/>3+ shards<br/>consistent hashing)]
     R --> RING
     API --> DDB[(DynamoDB<br/>short_urls)]

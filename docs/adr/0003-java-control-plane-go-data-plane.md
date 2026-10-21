@@ -16,7 +16,7 @@ Split the system into two deployables:
   Actuator, Micrometer, Resilience4j, Testcontainers) makes the feature-rich surface cheap to build and operate.
   It also runs the click-stream consumer and serves redirects as a fallback so the system is fully functional
   with a single deployable in small environments.
-- **`redirector` (Go 1.23)** for the data plane. A static binary with a ~10 MB distroless image, ~20 MB RSS,
+- **`redirector` (Go 1.26)** for the data plane. A static binary with a ~10 MB distroless image, ~20 MB RSS,
   no warm-up, and predictable tail latency without GC tuning. It scales independently and can be packed far
   more densely than JVM tasks.
 

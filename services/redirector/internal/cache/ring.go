@@ -37,7 +37,7 @@ func NewRing(nodes []string, virtualNodes int, timeout time.Duration, m *metrics
 			WriteTimeout:    timeout,
 			PoolSize:        64,
 			MinIdleConns:    4,
-			MaxRetries:      0, // the caller decides; retries would hide shard problems
+			MaxRetries:      -1, // disabled: the caller decides; retries would hide shard problems
 			ConnMaxIdleTime: 5 * time.Minute,
 		}))
 		r.labels = append(r.labels, strconv.Itoa(i))

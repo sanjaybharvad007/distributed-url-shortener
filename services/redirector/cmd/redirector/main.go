@@ -66,7 +66,7 @@ func main() {
 		log.Error("redis ring", "err", err)
 		os.Exit(1)
 	}
-	defer ring.Close()
+	defer func() { _ = ring.Close() }()
 	log.Info("redis ring ready", "nodes", cfg.RedisNodes, "virtualNodes", cfg.VirtualNodes)
 
 	st, err := store.New(ctx, cfg.DynamoEndpoint, cfg.DynamoTable, cfg.DynamoTimeout, m)
@@ -178,7 +178,7 @@ func probe(addr string) int {
 	if err != nil {
 		return 1
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return 1
 	}

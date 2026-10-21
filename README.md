@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/sanjaybharvad007/distributed-url-shortener/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjaybharvad007/distributed-url-shortener/actions/workflows/ci.yml)
 ![Java 21](https://img.shields.io/badge/Java-21-orange)
-![Go 1.23](https://img.shields.io/badge/Go-1.23-00ADD8)
+![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A production-grade, horizontally scalable URL-shortening platform built the way a large
@@ -20,7 +20,7 @@ pipeline** that builds, tests, scans and deploys every change.
    clients ──►  ALB ──┬──► shortener-api (Java 21 / Spring Boot 3)  ──┐              │
                  │    │      POST /api/v1/urls, GET /api/v1/urls/{code}/stats       │
                  │    │                                               ▼              │
-                 │    └──► redirector (Go 1.23)  ───────────►  Redis ring (3 shards)│
+                 │    └──► redirector (Go 1.26)  ───────────►  Redis ring (3 shards)│
                  │           GET /{code} → 302                 consistent hashing   │
                  │                     │   miss                    │                │
                  │                     └──────────────►  DynamoDB (short_urls)      │
@@ -52,7 +52,7 @@ pipeline** that builds, tests, scans and deploys every change.
 .
 ├── services/
 │   ├── shortener-api/     Java 21 / Spring Boot 3 control-plane API
-│   └── redirector/        Go 1.23 data-plane redirect service
+│   └── redirector/        Go 1.26 data-plane redirect service
 ├── infra/terraform/       AWS infrastructure as code
 ├── monitoring/            Prometheus, Alertmanager, Grafana provisioning
 ├── loadtest/k6/           Load-test scenarios
@@ -64,7 +64,7 @@ pipeline** that builds, tests, scans and deploys every change.
 
 ## Quick start (local)
 
-Prerequisites: Docker + Docker Compose, Java 21, Maven 3.9, Go 1.23.
+Prerequisites: Docker + Docker Compose, Java 21, Maven 3.9, Go 1.26.
 
 ```bash
 make up             # builds both services and starts the full stack
