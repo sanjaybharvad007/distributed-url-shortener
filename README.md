@@ -149,6 +149,7 @@ Architecture Decision Records live in [docs/adr](docs/adr):
 3. [Split control plane (Java) and data plane (Go)](docs/adr/0003-java-control-plane-go-data-plane.md)
 4. [Write-behind click counting through a Redis Stream](docs/adr/0004-write-behind-click-counting.md)
 5. [Token-bucket rate limiting in Redis](docs/adr/0005-token-bucket-rate-limiting.md)
+6. [Spring Boot 4 migration (proposed)](docs/adr/0006-spring-boot-4-migration.md)
 
 ## License
 

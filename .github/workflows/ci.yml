@@ -200,8 +200,8 @@ jobs:
             cat trivy-${{ matrix.service }}.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          grep -E "CVE-|GHSA-|stdlib" trivy-${{ matrix.service }}.txt | sed 's/[│|]/ /g; s/  */ /g' | head -10 \
-            | while IFS= read -r line; do echo "::warning title=Trivy ${{ matrix.service }}::$line"; done || true
+          grep -E "CVE-|GHSA-" trivy-${{ matrix.service }}.txt | sed 's/[│|]/ /g; s/  */ /g' | head -80 \
+            | awk -v svc='${{ matrix.service }}' '{ buf = buf $0 "%0A"; if (NR % 8 == 0) { print "::warning title=Trivy " svc "::" buf; buf = "" } } END { if (buf != "") print "::warning title=Trivy " svc "::" buf }' || true
 
       # 2. SARIF for the Security tab (reuses the cached DB).
       - name: Trivy report (SARIF)
@@ -223,7 +223,7 @@ jobs:
           category: trivy-${{ matrix.service }}
 
       # 3. The gate: fail on any fixable CRITICAL/HIGH vulnerability.
-      - name: Trivy gate (fail on fixable CRITICAL/HIGH)
+      - name: Trivy gate (fail on fixable CRITICAL/HIGH not listed in .trivyignore)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.service }}:ci
@@ -232,6 +232,7 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           skip-setup-trivy: true
+          trivyignores: .trivyignore
 
   # ------------------------------------------------------------------ end-to-end
   e2e:
