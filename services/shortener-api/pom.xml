@@ -30,6 +30,8 @@
     <jacoco.version>0.8.15</jacoco.version>
     <!-- Pin embedded Tomcat to the latest 10.1 patch so container scans stay clean between Boot releases -->
     <tomcat.version>10.1.61</tomcat.version>
+    <!-- Boot 3.5 manages the EOL Jackson 2.19 line; pin a maintained line with the current CVE fixes -->
+    <jackson-bom.version>2.21.7</jackson-bom.version>
   </properties>
 
   <dependencyManagement>

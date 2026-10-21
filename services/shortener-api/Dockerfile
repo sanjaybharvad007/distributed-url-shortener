@@ -9,7 +9,8 @@ RUN mvn -B -q -DskipTests package && \
 
 # ---- runtime -----------------------------------------------------------------
 FROM eclipse-temurin:21-jre-alpine
-RUN addgroup -S app && adduser -S -G app app && apk add --no-cache wget
+# apk upgrade pulls the distro's security fixes (e.g. expat) that lag behind the base image tag
+RUN apk upgrade --no-cache && apk add --no-cache wget && addgroup -S app && adduser -S -G app app
 WORKDIR /app
 COPY --from=build /layers/dependencies/ ./
 COPY --from=build /layers/spring-boot-loader/ ./
