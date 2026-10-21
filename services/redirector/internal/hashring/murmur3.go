@@ -48,7 +48,7 @@ func Murmur3_32(data []byte, seed uint32) uint32 {
 		h1 ^= k1
 	}
 
-	h1 ^= uint32(n)
+	h1 ^= uint32(n) //nolint:gosec // length is mixed in modulo 2^32 by the MurmurHash3 spec
 	h1 ^= h1 >> 16
 	h1 *= 0x85ebca6b
 	h1 ^= h1 >> 13

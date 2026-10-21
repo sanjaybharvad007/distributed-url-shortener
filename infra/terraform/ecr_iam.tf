@@ -116,8 +116,6 @@ resource "aws_iam_role_policy" "redirector_task_dynamodb" {
 }
 
 # ---------------------------------------------------------------- GitHub Actions OIDC deploy role (no long-lived keys)
-data "aws_caller_identity" "current" {}
-
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
