@@ -158,8 +158,14 @@ jobs:
     if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service: [shortener-api, redirector]
+    env:
+      # AWS-hosted mirrors of the Trivy databases: ghcr.io throttles anonymous pulls from
+      # GitHub runners, which makes the scan exit 1 with no findings at all.
+      TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
+      TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -172,7 +178,31 @@ jobs:
           tags: ${{ matrix.service }}:ci
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
-      - name: Trivy vulnerability scan
+
+      # 1. Human-readable report: always succeeds, so the findings are visible even when the gate fails.
+      - name: Trivy report (table)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.service }}:ci
+          format: table
+          output: trivy-${{ matrix.service }}.txt
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+      - name: Publish findings (job summary + annotations)
+        if: always()
+        run: |
+          {
+            echo "## Trivy · ${{ matrix.service }}"
+            echo '```'
+            cat trivy-${{ matrix.service }}.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E "CVE-|GHSA-|stdlib" trivy-${{ matrix.service }}.txt | sed 's/[│|]/ /g; s/  */ /g' | head -10 \
+            | while IFS= read -r line; do echo "::warning title=Trivy ${{ matrix.service }}::$line"; done || true
+
+      # 2. SARIF for the Security tab (reuses the cached DB).
+      - name: Trivy report (SARIF)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.service }}:ci
@@ -180,7 +210,11 @@ jobs:
           output: trivy-${{ matrix.service }}.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
+          skip-setup-trivy: true
+        env:
+          TRIVY_SKIP_DB_UPDATE: "true"
+          TRIVY_SKIP_JAVA_DB_UPDATE: "true"
       - name: Upload scan results
         if: always()
         uses: github/codeql-action/upload-sarif@v3
@@ -188,10 +222,25 @@ jobs:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}
 
+      # 3. The gate: fail on any fixable CRITICAL/HIGH vulnerability.
+      - name: Trivy gate (fail on fixable CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.service }}:ci
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-setup-trivy: true
+        env:
+          TRIVY_SKIP_DB_UPDATE: "true"
+          TRIVY_SKIP_JAVA_DB_UPDATE: "true"
+
   # ------------------------------------------------------------------ end-to-end
   e2e:
     name: End-to-end smoke test (docker compose)
-    needs: images
+    needs: [java, go]
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
