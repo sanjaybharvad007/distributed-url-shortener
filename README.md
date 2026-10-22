@@ -138,6 +138,9 @@ terraform apply -var 'environment=prod' -var 'alert_email=oncall@example.com'
 
 The `deploy.yml` workflow assumes an IAM role via GitHub OIDC, builds and pushes images to ECR,
 registers new ECS task definitions and triggers a rolling deployment with health-check gating.
+It is off until an AWS account is connected: set the repository secret `AWS_DEPLOY_ROLE_ARN`
+(`terraform output github_deploy_role_arn`) and the repository variable `AWS_DEPLOY_ENABLED=true`;
+until then the workflow is skipped after each CI run rather than failing.
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for rollback, scaling and on-call procedures.
 
 ## Design decisions

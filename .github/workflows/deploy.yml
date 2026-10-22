@@ -32,8 +32,13 @@ env:
 jobs:
   build-push:
     name: Build and push images
-    # Only deploy from a green CI run on main, or an explicit dispatch.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Deploy only when an AWS account is wired up (repository variable AWS_DEPLOY_ENABLED=true,
+    # secret AWS_DEPLOY_ROLE_ARN from `terraform output github_deploy_role_arn`), and only from a
+    # green CI run on main or an explicit dispatch. Without the variable the workflow is skipped
+    # instead of failing on every push.
+    if: >-
+      vars.AWS_DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'staging' }}
     outputs:
