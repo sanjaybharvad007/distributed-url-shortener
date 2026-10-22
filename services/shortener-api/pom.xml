@@ -26,7 +26,7 @@
     <springdoc.version>2.9.1</springdoc.version>
     <testcontainers.version>1.21.4</testcontainers.version>
     <!-- 8.x uses Jackson 2 (managed by Boot at a patched version); 9.x pulls a second, Jackson 3 line into the image -->
-    <logstash-encoder.version>8.1</logstash-encoder.version>
+    <logstash-encoder.version>9.0</logstash-encoder.version>
     <spotless.version>3.10.4</spotless.version>
     <jacoco.version>0.8.15</jacoco.version>
     <!-- Pin embedded Tomcat to the latest 10.1 patch so container scans stay clean between Boot releases -->
