@@ -8,7 +8,7 @@ RUN mvn -B -q -DskipTests package && \
     java -Djarmode=tools -jar target/shortener-api-*.jar extract --layers --launcher --destination /layers
 
 # ---- runtime -----------------------------------------------------------------
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 # apk upgrade pulls the distro's security fixes (e.g. expat) that lag behind the base image tag
 RUN apk upgrade --no-cache && apk add --no-cache wget && addgroup -S app && adduser -S -G app app
 WORKDIR /app
